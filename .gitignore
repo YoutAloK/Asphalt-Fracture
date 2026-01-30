@@ -1,0 +1,35 @@
+# Unity стандартный .gitignore (2025–2026 версия)
+
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Visual Studio / Rider / Code файлы
+*.csproj
+*.sln
+*.slnx
+*.unityproj
+.vs/
+.vscode/
+.idea/
+
+# OS мусор
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Пакеты (кроме важных manifest)
+[Pp]ackages/   # ← если хочешь игнорить весь, но лучше оставить manifest.json
+!Packages/manifest.json
+!Packages/packages-lock.json
+
+# Твои личные (если есть)
+TutorialInfo/
+Rex\ 3D\ Stu*/
+Rex\ 3D\ Studio/
