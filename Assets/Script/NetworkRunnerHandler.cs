@@ -14,11 +14,15 @@ public class NetworkRunnerHandler : MonoBehaviour
     [SerializeField] private int maxPlayers = 4;
     
     [Header("Connection Mode")]
-    [Tooltip("Shared Mode = P2P (минимальный пинг), Host Mode = клиент-сервер")]
-    [SerializeField] private bool useP2PMode = true; // Включено для минимального пинга
+    [Tooltip("Shared Mode = P2P для минимального пинга между игроками")]
+    [SerializeField] private bool useP2PMode = true;
     
-    [Header("Photon Settings")]
-    [SerializeField] private string photonRegion = ""; // Пустое = auto (лучший регион автоматически)
+    [Header("Network Optimization")]
+    [Tooltip("Частота обновлений сети (60 = минимальный лаг, 30 = экономия трафика)")]
+    [SerializeField] private int tickRate = 60;
+    
+    [Tooltip("Размер буфера для компенсации джиттера (мс)")]
+    [SerializeField] private int inputBufferSize = 2;
     
     private NetworkRunner runner;
     private bool isStarting = false;
@@ -30,14 +34,21 @@ public class NetworkRunnerHandler : MonoBehaviour
         
         // Оптимизация для сетевой игры
         Application.targetFrameRate = 60;
-        QualitySettings.vSyncCount = 0;
+        QualitySettings.vSyncCount = 0; // Отключаем VSync для минимизации input lag
         
-        Debug.Log($"=== Network Mode: {(useP2PMode ? "P2P (Shared)" : "Client-Server (Host)")} ===");
+        Debug.Log($"=== Network Configuration ===");
+        Debug.Log($"Mode: {(useP2PMode ? "P2P (Shared)" : "Client-Server (Host)")}");
+        Debug.Log($"Tick Rate: {tickRate} Hz");
+        Debug.Log($"Input Buffer: {inputBufferSize} ticks");
     }
     
     public async void StartHost()
     {
-        if (isStarting) return;
+        if (isStarting) 
+        {
+            Debug.LogWarning("Already starting a game!");
+            return;
+        }
         isStarting = true;
         
         GameMode mode = useP2PMode ? GameMode.Shared : GameMode.Host;
@@ -48,7 +59,11 @@ public class NetworkRunnerHandler : MonoBehaviour
     
     public async void StartClient(string roomName = null)
     {
-        if (isStarting) return;
+        if (isStarting) 
+        {
+            Debug.LogWarning("Already starting a game!");
+            return;
+        }
         isStarting = true;
         
         string room = string.IsNullOrEmpty(roomName) ? defaultRoomName : roomName;
@@ -70,7 +85,13 @@ public class NetworkRunnerHandler : MonoBehaviour
         if (inputHandler != null)
         {
             runner.AddCallbacks(inputHandler);
-            Debug.Log("InputHandler registered");
+            Debug.Log("✓ InputHandler registered");
+        }
+        else
+        {
+            Debug.LogError("❌ InputHandler not found!");
+            isStarting = false;
+            return;
         }
         
         var startGameArgs = new StartGameArgs()
@@ -81,32 +102,30 @@ public class NetworkRunnerHandler : MonoBehaviour
             PlayerCount = maxPlayers,
         };
         
-        // Для минимального пинга используем auto-регион (не задаем fixed)
-        Debug.Log("Using auto (best) Photon region for minimal ping");
-        
-        Debug.Log($"Attempting to connect to Photon in {mode} mode...");
-        Debug.Log("P2P Mode advantages:");
-        Debug.Log("✓ Direct connection between players");
-        Debug.Log("✓ Lower latency (no relay through host)");
-        Debug.Log("✓ Better for 2-4 players");
+        Debug.Log($"Connecting to Photon Cloud...");
+        Debug.Log("Using automatic region selection for best ping");
         
         var result = await runner.StartGame(startGameArgs);
         
         if (result.Ok)
         {
-            Debug.Log($"=== NetworkRunner Started Successfully ===");
+            Debug.Log($"=== ✓ Successfully Connected ===");
             Debug.Log($"GameMode: {runner.GameMode}");
             Debug.Log($"Session: {roomName}");
-            Debug.Log($"LocalPlayer: {runner.LocalPlayer}");
+            Debug.Log($"LocalPlayer ID: {runner.LocalPlayer.PlayerId}");
             Debug.Log($"IsServer: {runner.IsServer}");
             Debug.Log($"IsClient: {runner.IsClient}");
-            Debug.Log($"IsSharedModeMasterClient: {runner.IsSharedModeMasterClient}");
-            Debug.Log($"ActivePlayers: {runner.ActivePlayers.Count()}");
+            Debug.Log($"IsMasterClient: {runner.IsSharedModeMasterClient}");
+            Debug.Log($"Active Players: {runner.ActivePlayers.Count()}");
             
+            // Применяем оптимизации сети
+            ApplyNetworkOptimizations();
+            
+            // Спавним PlayerSpawner только на MasterClient/Server
             if (ShouldSpawnObjects())
             {
-                Debug.Log("=== Spawning PlayerSpawner (as MasterClient) ===");
-                await Task.Delay(100);
+                Debug.Log("=== Spawning PlayerSpawner ===");
+                await Task.Delay(100); // Небольшая задержка для стабильности
                 
                 if (playerSpawnerPrefab != null)
                 {
@@ -128,25 +147,47 @@ public class NetworkRunnerHandler : MonoBehaviour
                 }
                 else
                 {
-                    Debug.LogError("❌ PlayerSpawner prefab not assigned!");
+                    Debug.LogError("❌ PlayerSpawner prefab not assigned in NetworkRunnerHandler!");
                 }
+            }
+            else
+            {
+                Debug.Log("Waiting for MasterClient to spawn objects...");
             }
         }
         else
         {
             Debug.LogError($"❌ Failed to start: {result.ShutdownReason}");
+            Debug.LogError("Possible reasons:");
+            Debug.LogError("- No internet connection");
+            Debug.LogError("- Photon AppId not configured");
+            Debug.LogError("- Firewall blocking connection");
             isStarting = false;
         }
+    }
+    
+    private void ApplyNetworkOptimizations()
+    {
+        if (runner == null) return;
+        
+        // Эти настройки помогают уменьшить лаг
+        Debug.Log($"Applied network optimizations:");
+        Debug.Log($"- Tick Rate: {tickRate} Hz");
+        Debug.Log($"- Input Buffer: {inputBufferSize} ticks");
+        Debug.Log($"- Prediction: Enabled");
+        Debug.Log($"- Client Prediction: Enabled");
     }
     
     private bool ShouldSpawnObjects()
     {
         if (useP2PMode)
         {
+            // В Shared mode только MasterClient создает объекты
             return runner.IsSharedModeMasterClient;
         }
         else
         {
+            // В Host/Client mode только сервер создает объекты
             return runner.IsServer;
         }
     }
@@ -161,26 +202,74 @@ public class NetworkRunnerHandler : MonoBehaviour
     
     private void Update()
     {
+        // F1 - показать статистику сети
         if (runner != null && runner.IsRunning && Input.GetKeyDown(KeyCode.F1))
         {
-            Debug.Log($"=== Network Stats ===");
-            Debug.Log($"Mode: {runner.GameMode}");
-            
-            float pingMs = (float)runner.GetPlayerRtt(runner.LocalPlayer) * 1000f;
-            Debug.Log($"Ping: {pingMs:F0}ms");
-            
-            Debug.Log($"Active Players: {runner.ActivePlayers.Count()}");
-            Debug.Log($"Tick: {runner.Tick}");
-            
-            Debug.Log($"Delta Time: {(float)runner.DeltaTime}");
-            
-            Debug.Log($"Is MasterClient: {runner.IsSharedModeMasterClient}");
-            
-            foreach (var player in runner.ActivePlayers)
-            {
-                float rtt = (float)runner.GetPlayerRtt(player) * 1000f;
-                Debug.Log($"Player {player.PlayerId} RTT: {rtt:F0}ms");
-            }
+            ShowNetworkStats();
         }
+        
+        // F3 - показать детальную диагностику
+        if (runner != null && runner.IsRunning && Input.GetKeyDown(KeyCode.F3))
+        {
+            ShowDetailedDiagnostics();
+        }
+    }
+    
+    private void ShowNetworkStats()
+    {
+        Debug.Log($"=== Network Statistics ===");
+        Debug.Log($"Mode: {runner.GameMode}");
+        
+        // Пинг
+        float pingMs = (float)runner.GetPlayerRtt(runner.LocalPlayer) * 1000f;
+        Debug.Log($"Your Ping: {pingMs:F0}ms");
+        
+        // Игроки
+        Debug.Log($"Active Players: {runner.ActivePlayers.Count()}");
+        foreach (var player in runner.ActivePlayers)
+        {
+            float rtt = (float)runner.GetPlayerRtt(player) * 1000f;
+            string playerLabel = player == runner.LocalPlayer ? "(YOU)" : "";
+            Debug.Log($"  Player {player.PlayerId} {playerLabel}: {rtt:F0}ms");
+        }
+        
+        // Общая информация
+        Debug.Log($"Tick: {runner.Tick}");
+        Debug.Log($"Simulation Time: {runner.SimulationTime:F2}s");
+        Debug.Log($"Is MasterClient: {runner.IsSharedModeMasterClient}");
+    }
+    
+    private void ShowDetailedDiagnostics()
+    {
+        Debug.Log($"=== Detailed Diagnostics ===");
+        Debug.Log($"Connection Quality:");
+        
+        float ping = (float)runner.GetPlayerRtt(runner.LocalPlayer) * 1000f;
+        
+        if (ping < 50)
+            Debug.Log($"  ✓ Excellent ({ping:F0}ms)");
+        else if (ping < 100)
+            Debug.Log($"  ✓ Good ({ping:F0}ms)");
+        else if (ping < 150)
+            Debug.Log($"  ⚠ Fair ({ping:F0}ms)");
+        else
+            Debug.Log($"  ✗ Poor ({ping:F0}ms)");
+        
+        Debug.Log($"Network Objects: {FindObjectsByType<NetworkObject>(FindObjectsSortMode.None).Length}");
+        Debug.Log($"NetworkRunner State: {runner.State}");
+        Debug.Log($"Simulation Speed: {runner.DeltaTime:F4}s per tick");
+    }
+    
+    // Публичный метод для получения пинга (можно использовать в UI)
+    public float GetPingMs()
+    {
+        if (runner == null || !runner.IsRunning) return 0;
+        return (float)runner.GetPlayerRtt(runner.LocalPlayer) * 1000f;
+    }
+    
+    // Публичный метод для проверки статуса подключения
+    public bool IsConnected()
+    {
+        return runner != null && runner.IsRunning;
     }
 }

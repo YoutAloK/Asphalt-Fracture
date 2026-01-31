@@ -23,12 +23,18 @@ public class CarController : NetworkBehaviour
     [Header("Камера")]
     [SerializeField] private bool autoCreateCamera = true;
 
-    // ВАЖНО: Используем [Networked] для синхронизации input
+    // Сетевые переменные для синхронизации
     [Networked] private float HorizontalInput { get; set; }
     [Networked] private float VerticalInput { get; set; }
+    [Networked] private NetworkBool IsBraking { get; set; }
 
     private Rigidbody rb;
     private CarCameraController cameraController;
+    
+    // Буфер для сглаживания input (предотвращает рывки)
+    private float smoothHorizontal = 0f;
+    private float smoothVertical = 0f;
+    private const float inputSmoothTime = 0.05f;
     
     public override void Spawned()
     {
@@ -37,44 +43,45 @@ public class CarController : NetworkBehaviour
         Debug.Log($"InputAuthority: {Object.InputAuthority}");
         Debug.Log($"HasInputAuthority: {Object.HasInputAuthority}");
         Debug.Log($"LocalPlayer: {Runner.LocalPlayer}");
-        Debug.Log($"IsServer: {Runner.IsServer}");
         
         rb = GetComponent<Rigidbody>();
         
         if (rb != null)
         {
+            // Оптимизированные настройки Rigidbody для сетевой игры
             rb.centerOfMass = new Vector3(0, -0.5f, 0);
             rb.mass = 1500f;
             rb.linearDamping = 0.05f;
             rb.angularDamping = 0.5f;
             
-            // КРИТИЧНО: Убираем Interpolation - Fusion сам обрабатывает интерполяцию!
+            // КРИТИЧНО: Fusion сам управляет интерполяцией
             rb.interpolation = RigidbodyInterpolation.None;
             
-            // Используем Continuous только для машины с input authority
-            if (Object.HasInputAuthority)
-            {
-                rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-            }
-            else
-            {
-                rb.collisionDetectionMode = CollisionDetectionMode.Discrete;
-            }
+            // Для локального игрока - улучшенная детекция коллизий
+            rb.collisionDetectionMode = Object.HasInputAuthority 
+                ? CollisionDetectionMode.ContinuousDynamic 
+                : CollisionDetectionMode.Discrete;
             
-            Debug.Log($"Rigidbody configured: mass={rb.mass}, interpolation=None (Fusion handles it)");
+            Debug.Log($"Rigidbody configured: mass={rb.mass}, interpolation=None");
         }
         
         ConfigureWheels();
         
-        // Визуальная индикация
-        var renderer = GetComponentInChildren<Renderer>();
-        if (renderer != null)
+        // Визуальная индикация: зеленый = ваша машина, синий = противник
+        var renderers = GetComponentsInChildren<Renderer>();
+        Color carColor = Object.HasInputAuthority ? Color.green : new Color(0.3f, 0.5f, 1f);
+        
+        foreach (var renderer in renderers)
         {
-            renderer.material.color = Object.HasInputAuthority ? Color.green : Color.red;
-            Debug.Log($"Car color set to: {(Object.HasInputAuthority ? "GREEN (yours)" : "RED (other player)")}");
+            if (renderer.material != null)
+            {
+                renderer.material.color = carColor;
+            }
         }
         
-        // Создание камеры ТОЛЬКО для локального игрока
+        Debug.Log($"Car color set to: {(Object.HasInputAuthority ? "GREEN (yours)" : "BLUE (opponent)")}");
+        
+        // Создание камеры только для локального игрока
         if (Object.HasInputAuthority && autoCreateCamera)
         {
             CreateCamera();
@@ -88,11 +95,7 @@ public class CarController : NetworkBehaviour
         if (cameraController == null)
         {
             cameraController = gameObject.AddComponent<CarCameraController>();
-            Debug.Log("✓ Camera controller added to car (this is YOUR car)");
-        }
-        else
-        {
-            Debug.Log("✓ Camera controller already exists");
+            Debug.Log("✓ Camera controller added to car");
         }
     }
     
@@ -132,15 +135,19 @@ public class CarController : NetworkBehaviour
 
     public override void FixedUpdateNetwork()
     {
-        // Получаем input ТОЛЬКО от игрока с authority
+        // Получаем input только от игрока с authority
         if (GetInput(out NetworkInputData input))
         {
-            HorizontalInput = input.Horizontal;
-            VerticalInput = input.Vertical;
+            // Плавное сглаживание input для предотвращения рывков
+            smoothHorizontal = Mathf.Lerp(smoothHorizontal, input.Horizontal, inputSmoothTime);
+            smoothVertical = Mathf.Lerp(smoothVertical, input.Vertical, inputSmoothTime);
+            
+            HorizontalInput = smoothHorizontal;
+            VerticalInput = smoothVertical;
+            IsBraking = input.IsBraking;
         }
 
-        // ВАЖНО: Применяем физику на ВСЕХ клиентах для предсказания
-        // Fusion автоматически синхронизирует Rigidbody
+        // Применяем физику - Fusion автоматически синхронизирует Rigidbody
         ApplySteering();
         ApplyDriveAndBraking();
         ApplyAntiRoll();
@@ -156,6 +163,14 @@ public class CarController : NetworkBehaviour
     private void ApplyDriveAndBraking()
     {
         float currentSpeedRpm = rearLeftWheel.rpm;
+
+        // Принудительное торможение (пробел)
+        if (IsBraking)
+        {
+            ApplyMotorTorque(0);
+            ApplyBrakeTorque(brakeForce);
+            return;
+        }
 
         if (Mathf.Abs(VerticalInput) > 0.1f)
         {
@@ -175,6 +190,7 @@ public class CarController : NetworkBehaviour
         }
         else
         {
+            // Автоторможение когда нет input
             ApplyMotorTorque(0);
             ApplyBrakeTorque(100f);
         }

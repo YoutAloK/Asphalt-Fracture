@@ -14,6 +14,7 @@ public class InputHandler : MonoBehaviour, INetworkRunnerCallbacks
         // Собираем данные клавиатуры/геймпада
         data.Horizontal = Input.GetAxis("Horizontal");
         data.Vertical = Input.GetAxis("Vertical");
+        data.IsBraking = Input.GetKey(KeyCode.Space); // Ручное торможение
         
         // Отправляем в сеть
         input.Set(data);
@@ -22,7 +23,7 @@ public class InputHandler : MonoBehaviour, INetworkRunnerCallbacks
     // Когда игрок подключился
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
     {
-        Debug.Log($"[InputHandler] Player joined: {player.PlayerId}");
+        Debug.Log($"[InputHandler] ✓ Player {player.PlayerId} joined the game!");
         
         // Находим PlayerSpawner и сообщаем о новом игроке
         var spawner = FindFirstObjectByType<PlayerSpawner>();
@@ -35,7 +36,7 @@ public class InputHandler : MonoBehaviour, INetworkRunnerCallbacks
     // Когда игрок отключился
     public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
     {
-        Debug.Log($"[InputHandler] Player left: {player.PlayerId}");
+        Debug.Log($"[InputHandler] ✗ Player {player.PlayerId} left the game");
         
         // Находим PlayerSpawner и сообщаем об отключении
         var spawner = FindFirstObjectByType<PlayerSpawner>();
@@ -48,26 +49,25 @@ public class InputHandler : MonoBehaviour, INetworkRunnerCallbacks
     // Когда подключились к серверу
     public void OnConnectedToServer(NetworkRunner runner)
     {
-        Debug.Log("[InputHandler] Connected to server!");
+        Debug.Log("[InputHandler] ✓ Connected to Photon server!");
     }
     
     // Когда отключились от сервера
     public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
     {
-        Debug.LogWarning($"[InputHandler] Disconnected from server: {reason}");
+        Debug.LogWarning($"[InputHandler] ✗ Disconnected from server: {reason}");
     }
     
     // Когда не удалось подключиться
     public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason)
     {
-        Debug.LogError($"[InputHandler] Connection failed: {reason}");
+        Debug.LogError($"[InputHandler] ❌ Connection failed: {reason}");
     }
     
     // Запрос на подключение
     public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
     {
-        // Можно добавить проверку пароля или других условий
-        Debug.Log("[InputHandler] Connection request received");
+        Debug.Log("[InputHandler] Connection request received - accepting");
     }
     
     // Когда игра завершается
@@ -78,17 +78,24 @@ public class InputHandler : MonoBehaviour, INetworkRunnerCallbacks
     
     // === Остальные обязательные методы интерфейса ===
     
-    public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
+    public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) 
+    { 
+        // Пропущенный input - может происходить при высоком пинге
+        Debug.LogWarning($"[InputHandler] Input missing for player {player.PlayerId}");
+    }
     
     public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }
     
-    public void OnSessionListUpdated(NetworkRunner runner, List<SessionInfo> sessionList) { }
+    public void OnSessionListUpdated(NetworkRunner runner, List<SessionInfo> sessionList) 
+    {
+        Debug.Log($"[InputHandler] Sessions available: {sessionList.Count}");
+    }
     
     public void OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data) { }
     
     public void OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken)
     {
-        Debug.Log("[InputHandler] Host migration started");
+        Debug.Log("[InputHandler] Host migration started - game will continue");
     }
     
     public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data) { }
@@ -97,12 +104,12 @@ public class InputHandler : MonoBehaviour, INetworkRunnerCallbacks
     
     public void OnSceneLoadDone(NetworkRunner runner)
     {
-        Debug.Log("[InputHandler] Scene load done");
+        Debug.Log("[InputHandler] ✓ Scene loaded successfully");
     }
     
     public void OnSceneLoadStart(NetworkRunner runner)
     {
-        Debug.Log("[InputHandler] Scene load start");
+        Debug.Log("[InputHandler] Scene loading...");
     }
     
     public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }

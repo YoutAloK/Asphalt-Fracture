@@ -1,13 +1,17 @@
 using UnityEngine;
 
 /// <summary>
-/// Автоматический настройщик для NetworkManager
-/// Добавь этот скрипт на GameObject с NetworkRunnerHandler
+/// Автоматический настройщик для Network Manager
+/// Добавьте этот скрипт на GameObject с NetworkRunnerHandler
 /// </summary>
 public class NetworkManagerSetup : MonoBehaviour
 {
     [Header("Auto Setup")]
     [SerializeField] private bool autoFindInputHandler = true;
+    [SerializeField] private bool validateOnStart = true;
+    
+    [Header("Debug")]
+    [SerializeField] private bool showDetailedLogs = true;
     
     private void Awake()
     {
@@ -18,48 +22,146 @@ public class NetworkManagerSetup : MonoBehaviour
             if (inputHandler == null)
             {
                 inputHandler = gameObject.AddComponent<InputHandler>();
-                Debug.Log("[Setup] InputHandler automatically added");
+                Log("✓ InputHandler automatically added");
+            }
+            else
+            {
+                Log("✓ InputHandler already exists");
             }
         }
     }
     
     private void Start()
     {
-        // Проверяем наличие всех необходимых компонентов
-        ValidateSetup();
+        if (validateOnStart)
+        {
+            ValidateSetup();
+        }
     }
     
     private void ValidateSetup()
     {
-        bool isValid = true;
+        Log("=== Validating Network Setup ===");
         
+        bool isValid = true;
+        int warnings = 0;
+        
+        // Проверка 1: NetworkRunnerHandler
         var networkHandler = GetComponent<NetworkRunnerHandler>();
         if (networkHandler == null)
         {
-            Debug.LogError("[Setup] ❌ NetworkRunnerHandler not found!");
+            LogError("❌ NetworkRunnerHandler not found!");
             isValid = false;
-        }
-        
-        var inputHandler = GetComponent<InputHandler>();
-        if (inputHandler == null)
-        {
-            Debug.LogError("[Setup] ❌ InputHandler not found!");
-            isValid = false;
-        }
-        
-        var menuUI = FindFirstObjectByType<NetworkMenuUI>();
-        if (menuUI == null)
-        {
-            Debug.LogWarning("[Setup] ⚠️ NetworkMenuUI not found! You need to create UI.");
-        }
-        
-        if (isValid)
-        {
-            Debug.Log("[Setup] ✓ Network Manager setup is complete!");
         }
         else
         {
-            Debug.LogError("[Setup] ❌ Setup incomplete! Check errors above.");
+            Log("✓ NetworkRunnerHandler found");
         }
+        
+        // Проверка 2: InputHandler
+        var inputHandler = GetComponent<InputHandler>();
+        if (inputHandler == null)
+        {
+            LogError("❌ InputHandler not found!");
+            isValid = false;
+        }
+        else
+        {
+            Log("✓ InputHandler found");
+        }
+        
+        // Проверка 3: NetworkMenuUI
+        var menuUI = FindFirstObjectByType<NetworkMenuUI>();
+        if (menuUI == null)
+        {
+            LogWarning("⚠️ NetworkMenuUI not found! You need to create UI manually.");
+            warnings++;
+        }
+        else
+        {
+            Log("✓ NetworkMenuUI found");
+        }
+        
+        // Проверка 4: PlayerSpawner prefab
+        if (networkHandler != null)
+        {
+            var spawnerField = networkHandler.GetType().GetField("playerSpawnerPrefab", 
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            
+            if (spawnerField != null)
+            {
+                var prefab = spawnerField.GetValue(networkHandler);
+                if (prefab == null)
+                {
+                    LogWarning("⚠️ PlayerSpawner prefab not assigned in NetworkRunnerHandler!");
+                    warnings++;
+                }
+                else
+                {
+                    Log("✓ PlayerSpawner prefab assigned");
+                }
+            }
+        }
+        
+        // Проверка 5: Fusion App ID
+        if (!Application.isEditor)
+        {
+            // В билде проверяем наличие Fusion settings
+            LogWarning("⚠️ Make sure Photon Fusion AppId is configured in Project Settings!");
+            warnings++;
+        }
+        
+        // Итоговый результат
+        Debug.Log("=================================");
+        if (isValid && warnings == 0)
+        {
+            Log("✓✓✓ Network Manager setup is PERFECT!");
+        }
+        else if (isValid)
+        {
+            LogWarning($"⚠ Setup complete with {warnings} warning(s). Check above.");
+        }
+        else
+        {
+            LogError("❌ Setup FAILED! Fix errors above before playing.");
+        }
+        Debug.Log("=================================");
+        
+        // Подсказки для игры
+        if (isValid)
+        {
+            Log("Controls:");
+            Log("  WASD / Arrows - Drive");
+            Log("  Space - Brake");
+            Log("  F1 - Network Stats");
+            Log("  F2 - Spawned Cars");
+            Log("  F3 - Detailed Diagnostics");
+            Log("  ESC - Toggle Menu");
+        }
+    }
+    
+    private void Log(string message)
+    {
+        if (showDetailedLogs)
+        {
+            Debug.Log($"[Setup] {message}");
+        }
+    }
+    
+    private void LogWarning(string message)
+    {
+        Debug.LogWarning($"[Setup] {message}");
+    }
+    
+    private void LogError(string message)
+    {
+        Debug.LogError($"[Setup] {message}");
+    }
+    
+    // Вспомогательный метод для ручной валидации
+    [ContextMenu("Validate Setup")]
+    public void ManualValidate()
+    {
+        ValidateSetup();
     }
 }

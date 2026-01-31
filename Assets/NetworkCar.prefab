@@ -3058,7 +3058,6 @@ MonoBehaviour:
   NetworkedBehaviours:
   - {fileID: 6448579302517485095}
   - {fileID: 8125139334640049936}
-  - {fileID: 2168676836112400987}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &6448579302517485095
 MonoBehaviour:
@@ -3134,39 +3133,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d1d401d6ea5dd2c4cb9aa712aa4228ed, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CarCameraController
-  defaultMode: 0
-  allowCameraShake: 1
-  chaseOffset: {x: 0, y: 2, z: -5}
-  chaseHeight: 1.5
-  chaseDistance: 6
-  chaseSmoothSpeed: 10
-  chaseRotationSpeed: 5
-  chaseLookAhead: 3
-  chaseLateralOffset: 1
-  chaseMaxSpeedOffset: 3
-  chaseSpeedSmoothTime: 0.1
-  hoodPosition: {x: 0, y: 0.8, z: 1.5}
-  hoodRotation: {x: 10, y: 0, z: 0}
-  hoodShakeAmount: 0.02
-  orbitDistance: 8
-  orbitHeight: 2
-  orbitSpeed: 30
-  orbitSmoothness: 5
-  orbitMinDistance: 3
-  orbitMaxDistance: 15
-  fov: 70
-  speedFovMultiplier: 0.3
-  maxFov: 85
-  cameraShakeAmount: 0.1
-  cameraShakeFrequency: 10
-  collisionMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  collisionRadius: 0.3
-  collisionOffsetSpeed: 10
-  mouseSensitivity: 1
-  scrollSensitivity: 2
-  invertMouseY: 1
+  cameraOffset: {x: 0, y: 2.5, z: -6}
+  followSpeed: 10
+  rotationSpeed: 5
+  lookAheadDistance: 5
+  smoothFollow: 1
+  minFollowSpeed: 5
+  maxFollowSpeed: 15
 --- !u!1 &1357072050829962677
 GameObject:
   m_ObjectHideFlags: 0
